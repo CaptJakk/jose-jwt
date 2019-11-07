@@ -120,6 +120,7 @@ ecSign :: Integer
        -> Either JwtError ByteString
 ecSign k a key msg = case a of
     ES256 -> go SHA256
+    ES256K -> go SHA256
     ES384 -> go SHA384
     ES512 -> go SHA512
     _     -> Left . BadAlgorithm . T.pack $ "Not a valid JWT ECDSA algorithm: " ++ show a
@@ -138,6 +139,7 @@ ecVerify :: JwsAlg          -- ^ The signature algorithm. Used to obtain the has
          -> Bool            -- ^ Whether the signature is correct
 ecVerify a key msg sig = case a of
     ES256 -> go SHA256
+    ES256K -> go SHA256
     ES384 -> go SHA384
     ES512 -> go SHA512
     _     -> False

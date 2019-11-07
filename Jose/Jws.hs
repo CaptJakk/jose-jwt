@@ -52,7 +52,7 @@ jwkEncode :: MonadRandom m
 jwkEncode a key payload = case key of
     RsaPrivateJwk kPr kid _ _   -> rsaEncodeInternal a kPr (sigTarget a kid payload)
     SymmetricJwk  k   kid _ _   -> return $ hmacEncodeInternal a k (sigTarget a kid payload)
-    EcPrivateJwk  kp  kid _ _ c -> 
+    EcPrivateJwk  kp  kid _ _ c ->
         let (ECDSA.KeyPair keyCurve _ _) = kp
         in if keyCurve == curve c
             then ecEncodeInternal a kp (sigTarget a kid payload)
@@ -61,6 +61,7 @@ jwkEncode a key payload = case key of
   where
     curve = \case
         P_256 -> ECC.getCurveByName ECC.SEC_p256r1
+        P_256K -> ECC.getCurveByName ECC.SEC_p256k1
         P_384 -> ECC.getCurveByName ECC.SEC_p384r1
         P_521 -> ECC.getCurveByName ECC.SEC_p521r1
 

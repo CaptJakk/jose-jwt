@@ -12,6 +12,7 @@ import qualified Data.ByteString.Char8 ()
 import Data.Word (Word64)
 import Crypto.Hash.Algorithms (SHA256(..))
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
+import qualified Crypto.PubKey.ECC.Generate as ECDSA
 import qualified Crypto.PubKey.ECC.Types as ECC
 import Crypto.MAC.HMAC (HMAC, hmac)
 import qualified Crypto.PubKey.RSA as RSA
@@ -77,13 +78,20 @@ spec =
           rsaRoundTrip RS512 a21Payload
 
         it "encodes/decodes using ES256" $
-          ecRoundTrip ES256 a21Payload
+          ecRoundTrip ecKeyPair ES256 a21Payload
 
         it "encodes/decodes using ES384" $
-          ecRoundTrip ES256 a21Payload
+          ecRoundTrip ecKeyPair ES384 a21Payload
 
         it "encodes/decodes using ES512" $
-          ecRoundTrip ES256 a21Payload
+          ecRoundTrip ecKeyPair ES512 a21Payload
+
+        ecKeyPairK1 <- runIO $ do
+          let c = ECC.getCurveByName ECC.SEC_p256k1
+          (q, p) <- ECDSA.generate c
+          pure $ ECDSA.KeyPair c (ECDSA.public_q q) (ECDSA.private_d p)
+        it "encodes/decodes using ES256K" $
+          ecRoundTrip ecKeyPairK1 ES256K a21Payload
 
 
 
@@ -112,8 +120,8 @@ hmacRoundTrip a msg = let Right (Jwt encoded) = Jws.hmacEncode a "asecretkey" ms
 rsaRoundTrip a msg = let Right (Jwt encoded) = fstWithRNG (Jws.rsaEncode a rsaPrivateKey msg)
                      in  Jws.rsaDecode rsaPublicKey encoded @?= Right (defJwsHdr {jwsAlg = a}, msg)
 
-ecRoundTrip a msg = let Right (Jwt encoded) = fstWithRNG (Jws.ecEncode a ecKeyPair msg)
-                    in Jws.ecDecode (ECDSA.toPublicKey ecKeyPair) encoded @?= Right (defJwsHdr {jwsAlg = a}, msg)
+ecRoundTrip keys a msg = let Right (Jwt encoded) = fstWithRNG (Jws.ecEncode a keys msg)
+                    in Jws.ecDecode (ECDSA.toPublicKey keys) encoded @?= Right (defJwsHdr {jwsAlg = a}, msg)
 
 -- Unsecured JWT from section 6.1
 jwt61 = "eyJhbGciOiJub25lIn0.eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ."

@@ -46,6 +46,7 @@ data KeyType = Rsa
                deriving (Eq)
 
 data EcCurve = P_256
+             | P_256K
              | P_384
              | P_521
                deriving (Eq,Show)
@@ -113,6 +114,7 @@ canDecodeJws hdr jwk = jwkUse jwk /= Just Enc &&
         (ES384, EcPublicJwk {})  -> True
         (ES512, EcPublicJwk {})  -> True
         (ES256, EcPrivateJwk {})  -> True
+        (ES256K, EcPrivateJwk {})  -> True
         (ES384, EcPrivateJwk {})  -> True
         (ES512, EcPrivateJwk {})  -> True
         _                        -> False
@@ -172,6 +174,7 @@ algCompatible a k' = case jwkAlg k' of
 curve :: EcCurve -> ECC.Curve
 curve c = ECC.getCurveByName $ case c of
     P_256 -> ECC.SEC_p256r1
+    P_256K -> ECC.SEC_p256k1
     P_384 -> ECC.SEC_p384r1
     P_521 -> ECC.SEC_p521r1
 
@@ -233,6 +236,7 @@ instance FromJSON EcCurve where
     parseJSON = withText "EcCurve" $ \t ->
         case t of
           "P-256" -> pure P_256
+          "P-256K" -> pure P_256K
           "P-384" -> pure P_384
           "P-521" -> pure P_521
           _       -> fail "unsupported 'crv' value"
@@ -240,6 +244,7 @@ instance FromJSON EcCurve where
 instance ToJSON EcCurve where
     toJSON c =  case c of
                     P_256 -> String "P-256"
+                    P_256K -> String "P-256K"
                     P_384 -> String "P-384"
                     P_521 -> String "P-521"
 
