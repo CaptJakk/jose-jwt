@@ -23,7 +23,6 @@ module Jose.Types
 where
 
 import Data.Aeson
-import Data.Aeson.Types
 import Data.Char (toUpper, toLower)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as BL
