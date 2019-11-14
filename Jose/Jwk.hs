@@ -1,4 +1,6 @@
-{-# LANGUAGE OverloadedStrings, DeriveGeneric, RecordWildCards #-}
+{-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 {-# OPTIONS_HADDOCK prune #-}
 
 module Jose.Jwk
@@ -20,25 +22,26 @@ module Jose.Jwk
     )
 where
 
-import           Control.Applicative (pure)
-import           Control.Monad (unless)
-import           Crypto.Random (MonadRandom, getRandomBytes)
-import qualified Crypto.PubKey.RSA as RSA
+import           Control.Applicative     (pure)
+import           Control.Monad           (unless)
+import           Crypto.Number.Serialize
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
 import qualified Crypto.PubKey.ECC.Types as ECC
-import           Crypto.Number.Serialize
-import           Data.Aeson (genericToJSON, Value(..), FromJSON(..), ToJSON(..), withText)
-import           Data.Aeson.Types (Parser, Options (..), defaultOptions)
-import           Data.ByteString (ByteString)
-import qualified Data.ByteString as B
-import           Data.Maybe (isNothing)
-import           Data.Text (Text)
-import qualified Data.Text.Encoding as TE
-import           GHC.Generics (Generic)
+import qualified Crypto.PubKey.RSA       as RSA
+import           Crypto.Random           (MonadRandom, getRandomBytes)
+import           Data.Aeson              (FromJSON (..), ToJSON (..),
+                                          Value (..), genericToJSON, withText)
+import           Data.Aeson.Types        (Options (..), Parser, defaultOptions)
+import           Data.ByteString         (ByteString)
+import qualified Data.ByteString         as B
+import           Data.Maybe              (isNothing)
+import           Data.Text               (Text)
+import qualified Data.Text.Encoding      as TE
+import           GHC.Generics            (Generic)
 
-import qualified Jose.Internal.Base64 as B64
+import qualified Jose.Internal.Base64    as B64
 import           Jose.Jwa
-import           Jose.Types (KeyId, JwsHeader(..), JweHeader(..))
+import           Jose.Types              (JweHeader (..), JwsHeader (..), KeyId)
 
 data KeyType = Rsa
              | Ec
@@ -89,35 +92,36 @@ generateSymmetricKey size id' kuse kalg = do
 isPublic :: Jwk -> Bool
 isPublic RsaPublicJwk {} = True
 isPublic EcPublicJwk  {} = True
-isPublic _ = False
+isPublic _               = False
 
 isPrivate :: Jwk -> Bool
 isPrivate RsaPrivateJwk {} = True
 isPrivate EcPrivateJwk  {} = True
-isPrivate _ = False
+isPrivate _                = False
 
 canDecodeJws :: JwsHeader -> Jwk -> Bool
 canDecodeJws hdr jwk = jwkUse jwk /= Just Enc &&
     keyIdCompatible (jwsKid hdr) jwk &&
     algCompatible (Signed (jwsAlg hdr)) jwk &&
     case (jwsAlg hdr, jwk) of
-        (RS256, RsaPublicJwk {}) -> True
-        (RS384, RsaPublicJwk {}) -> True
-        (RS512, RsaPublicJwk {}) -> True
+        (RS256, RsaPublicJwk {})  -> True
+        (RS384, RsaPublicJwk {})  -> True
+        (RS512, RsaPublicJwk {})  -> True
         (RS256, RsaPrivateJwk {}) -> True
         (RS384, RsaPrivateJwk {}) -> True
         (RS512, RsaPrivateJwk {}) -> True
-        (HS256, SymmetricJwk {}) -> True
-        (HS384, SymmetricJwk {}) -> True
-        (HS512, SymmetricJwk {}) -> True
-        (ES256, EcPublicJwk {})  -> True
-        (ES384, EcPublicJwk {})  -> True
-        (ES512, EcPublicJwk {})  -> True
+        (HS256, SymmetricJwk {})  -> True
+        (HS384, SymmetricJwk {})  -> True
+        (HS512, SymmetricJwk {})  -> True
+        (ES256, EcPublicJwk {})   -> True
+        (ES256K, EcPublicJwk {})  -> True
+        (ES384, EcPublicJwk {})   -> True
+        (ES512, EcPublicJwk {})   -> True
         (ES256, EcPrivateJwk {})  -> True
-        (ES256K, EcPrivateJwk {})  -> True
+        (ES256K, EcPrivateJwk {}) -> True
         (ES384, EcPrivateJwk {})  -> True
         (ES512, EcPrivateJwk {})  -> True
-        _                        -> False
+        _                         -> False
 
 canEncodeJws :: JwsAlg -> Jwk -> Bool
 canEncodeJws a jwk = jwkUse jwk /= Just Enc &&
@@ -139,28 +143,28 @@ canDecodeJwe hdr jwk = jwkUse jwk /= Just Sig &&
     keyIdCompatible (jweKid hdr) jwk &&
     algCompatible (Encrypted (jweAlg hdr)) jwk &&
     case (jweAlg hdr, jwk) of
-        (RSA1_5,       RsaPrivateJwk {}) -> True
-        (RSA_OAEP,     RsaPrivateJwk {}) -> True
-        (RSA_OAEP_256, RsaPrivateJwk {}) -> True
+        (RSA1_5,       RsaPrivateJwk {})     -> True
+        (RSA_OAEP,     RsaPrivateJwk {})     -> True
+        (RSA_OAEP_256, RsaPrivateJwk {})     -> True
         (A128KW,       SymmetricJwk k _ _ _) -> B.length k == 16
         (A192KW,       SymmetricJwk k _ _ _) -> B.length k == 24
         (A256KW,       SymmetricJwk k _ _ _) -> B.length k == 32
-        _                            -> False
+        _                                    -> False
 
 canEncodeJwe :: JweAlg -> Jwk -> Bool
 canEncodeJwe a jwk = jwkUse jwk /= Just Sig &&
     algCompatible (Encrypted a) jwk &&
     case (a, jwk) of
-        (RSA1_5,       RsaPublicJwk {})  -> True
-        (RSA_OAEP,     RsaPublicJwk {})  -> True
-        (RSA_OAEP_256, RsaPublicJwk {})  -> True
-        (RSA1_5,       RsaPrivateJwk {}) -> True
-        (RSA_OAEP,     RsaPrivateJwk {}) -> True
-        (RSA_OAEP_256, RsaPrivateJwk {}) -> True
+        (RSA1_5,       RsaPublicJwk {})      -> True
+        (RSA_OAEP,     RsaPublicJwk {})      -> True
+        (RSA_OAEP_256, RsaPublicJwk {})      -> True
+        (RSA1_5,       RsaPrivateJwk {})     -> True
+        (RSA_OAEP,     RsaPrivateJwk {})     -> True
+        (RSA_OAEP_256, RsaPrivateJwk {})     -> True
         (A128KW,       SymmetricJwk k _ _ _) -> B.length k == 16
         (A192KW,       SymmetricJwk k _ _ _) -> B.length k == 24
         (A256KW,       SymmetricJwk k _ _ _) -> B.length k == 32
-        _                            -> False
+        _                                    -> False
 
 keyIdCompatible :: Maybe KeyId -> Jwk -> Bool
 keyIdCompatible Nothing _ = True
@@ -173,34 +177,34 @@ algCompatible a k' = case jwkAlg k' of
 
 curve :: EcCurve -> ECC.Curve
 curve c = ECC.getCurveByName $ case c of
-    P_256 -> ECC.SEC_p256r1
+    P_256  -> ECC.SEC_p256r1
     P_256K -> ECC.SEC_p256k1
-    P_384 -> ECC.SEC_p384r1
-    P_521 -> ECC.SEC_p521r1
+    P_384  -> ECC.SEC_p384r1
+    P_521  -> ECC.SEC_p521r1
 
 jwkId :: Jwk -> Maybe KeyId
 jwkId key = case key of
-    RsaPublicJwk  _ keyId _ _ -> keyId
-    RsaPrivateJwk _ keyId _ _ -> keyId
+    RsaPublicJwk  _ keyId _ _   -> keyId
+    RsaPrivateJwk _ keyId _ _   -> keyId
     EcPublicJwk   _ keyId _ _ _ -> keyId
     EcPrivateJwk  _ keyId _ _ _ -> keyId
-    SymmetricJwk  _ keyId _ _ -> keyId
+    SymmetricJwk  _ keyId _ _   -> keyId
 
 jwkUse :: Jwk -> Maybe KeyUse
 jwkUse key = case key of
-    RsaPublicJwk  _ _ u _ -> u
-    RsaPrivateJwk _ _ u _ -> u
+    RsaPublicJwk  _ _ u _   -> u
+    RsaPrivateJwk _ _ u _   -> u
     EcPublicJwk   _ _ u _ _ -> u
     EcPrivateJwk  _ _ u _ _ -> u
-    SymmetricJwk  _ _ u _ -> u
+    SymmetricJwk  _ _ u _   -> u
 
 jwkAlg :: Jwk -> Maybe Alg
 jwkAlg key = case key of
-    RsaPublicJwk  _ _ _ a -> a
-    RsaPrivateJwk _ _ _ a -> a
+    RsaPublicJwk  _ _ _ a   -> a
+    RsaPrivateJwk _ _ _ a   -> a
     EcPublicJwk   _ _ _ a _ -> a
     EcPrivateJwk  _ _ _ a _ -> a
-    SymmetricJwk  _ _ _ a -> a
+    SymmetricJwk  _ _ _ a   -> a
 
 
 
@@ -235,24 +239,24 @@ instance ToJSON KeyUse where
 instance FromJSON EcCurve where
     parseJSON = withText "EcCurve" $ \t ->
         case t of
-          "P-256" -> pure P_256
+          "P-256"  -> pure P_256
           "P-256K" -> pure P_256K
-          "P-384" -> pure P_384
-          "P-521" -> pure P_521
-          _       -> fail "unsupported 'crv' value"
+          "P-384"  -> pure P_384
+          "P-521"  -> pure P_521
+          _        -> fail "unsupported 'crv' value"
 
 instance ToJSON EcCurve where
     toJSON c =  case c of
-                    P_256 -> String "P-256"
+                    P_256  -> String "P-256"
                     P_256K -> String "P-256K"
-                    P_384 -> String "P-384"
-                    P_521 -> String "P-521"
+                    P_384  -> String "P-384"
+                    P_521  -> String "P-521"
 
 instance FromJSON JwkBytes where
     parseJSON = withText "JwkBytes" $ \t ->
         case B64.decode (TE.encodeUtf8 t) of
-          Left  _  -> fail "could not base64 decode bytes"
-          Right b  -> pure $ JwkBytes b
+          Left  _ -> fail "could not base64 decode bytes"
+          Right b -> pure $ JwkBytes b
 
 instance ToJSON JwkBytes where
     toJSON (JwkBytes b) = String . TE.decodeUtf8 $ B64.encode b
@@ -312,7 +316,7 @@ instance ToJSON Jwk where
         i2b i = Just . JwkBytes . i2osp $ i
         ecPoint pk = case ECDSA.public_q pk of
             ECC.Point xi yi -> (i2b xi, i2b yi)
-            _             -> (Nothing, Nothing)
+            _               -> (Nothing, Nothing)
 
         createPubData pubKey mId mUse mAlg = defJwk
                               { n   = i2b (RSA.public_n pubKey)
